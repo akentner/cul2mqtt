@@ -59,7 +59,9 @@ mqtt.on('message', function (topic, message) {
     var parsed;
     var regEx;
 
-    log.debug('mqtt >')
+    log.debug('mqtt >', topic, message);
+
+
 
 
 
@@ -113,16 +115,16 @@ cul.on('data', function (raw, obj) {
         ts: new Date().getTime()
     };
 
-
     if (obj && obj.protocol && obj.data) {
 
         log.debug('obj', obj);
 
         switch (obj.protocol) {
             case 'EM':
-                topic = prefix + map(obj.protocol + '/' + obj.address);
+                topic = prefix + obj.protocol + '/' + obj.address;
                 val.val = obj.data.total;
                 val.cul_em = obj.data;
+                val.name = map(obj.protocol + '/' + obj.address);
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
                 log.debug('> mqtt', topic, val);
@@ -132,8 +134,9 @@ cul.on('data', function (raw, obj) {
             case 'HMS':
             case 'WS':
                 for (var el in obj.data) {
-                    topic = prefix + map(obj.protocol + '/' + obj.address + '/' + el);
+                    topic = prefix + obj.protocol + '/' + obj.address + '/' + el;
                     val.val = obj.data[el];
+                    val.name = map(obj.protocol + '/' + obj.address + '/' + el);
                     if (obj.rssi) val.cul_rssi = obj.rssi;
                     if (obj.device) val.cul_device = obj.device;
                     log.debug('> mqtt', topic, val);
@@ -142,9 +145,10 @@ cul.on('data', function (raw, obj) {
                 break;
 
             case 'FS20':
-                topic = prefix + map('FS20/' + obj.address);
+                topic = prefix + 'FS20/' + obj.address;
                 val.val = obj.data.cmdRaw;
                 val.cul_fs20 = obj.data;
+                val.name = map('FS20/' + obj.address);
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
                 log.debug('> mqtt', topic, val.val, val.cul_fs20.cmd);
