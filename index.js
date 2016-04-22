@@ -55,7 +55,18 @@ mqtt.on('error', function () {
     log.error('mqtt error ' + config.url);
 });
 
+mqtt.on('message', function (topic, message) {
+    var parsed;
+    var regEx;
 
+    log.debug('mqtt >')
+
+
+
+    cul.write(data, function() {
+
+    });
+});
 
 var cul = new Cul({
     serialport: config.serialport,
@@ -94,7 +105,7 @@ function map(topic) {
 }
 
 cul.on('data', function (raw, obj) {
-    log.debug('<', raw, obj);
+    log.debug('< cul', raw, obj);
 
     var prefix = config.name + '/status/';
     var topic;
@@ -105,6 +116,8 @@ cul.on('data', function (raw, obj) {
 
     if (obj && obj.protocol && obj.data) {
 
+        log.debug('obj', obj);
+
         switch (obj.protocol) {
             case 'EM':
                 topic = prefix + map(obj.protocol + '/' + obj.address);
@@ -112,7 +125,7 @@ cul.on('data', function (raw, obj) {
                 val.cul_em = obj.data;
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
-                log.debug('>', topic, val);
+                log.debug('> mqtt', topic, val);
                 mqtt.publish(topic, JSON.stringify(val), {retain: true});
                 break;
 
@@ -123,7 +136,7 @@ cul.on('data', function (raw, obj) {
                     val.val = obj.data[el];
                     if (obj.rssi) val.cul_rssi = obj.rssi;
                     if (obj.device) val.cul_device = obj.device;
-                    log.debug('>', topic, val);
+                    log.debug('> mqtt', topic, val);
                     mqtt.publish(topic, JSON.stringify(val), {retain: true});
                 }
                 break;
@@ -134,7 +147,7 @@ cul.on('data', function (raw, obj) {
                 val.cul_fs20 = obj.data;
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
-                log.debug('>', topic, val.val, val.cul_fs20.cmd);
+                log.debug('> mqtt', topic, val.val, val.cul_fs20.cmd);
                 mqtt.publish(topic, JSON.stringify(val), {retain: false});
                 break;
 
