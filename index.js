@@ -76,15 +76,9 @@ var cul = new Cul({
 });
 
 cul.on('ready', function () {
-
-    var version = cul.write('V');
-
-    log.info('cul ready', version);
-
     mqtt.publish(config.name + '/connected', '2');
-
-
-
+    cul.write('V');
+    log.info('cul ready', version);
 });
 
 
