@@ -41,7 +41,7 @@ var connected;
 mqtt.on('connect', function () {
     connected = true;
     log.info('mqtt connected ' + config.url);
-    mqtt.subscribe(config.prefix + '/set/#');
+    mqtt.subscribe(config.name + '/set/#');
 });
 
 mqtt.on('close', function () {
@@ -56,18 +56,29 @@ mqtt.on('error', function () {
 });
 
 mqtt.on('message', function (topic, message) {
-    var parsed;
-    var regEx;
+    var data;
+    var pattern = '^' + config.name + '/set/(.+)/(.+)';
+    var regExp = new RegExp(pattern);
+    var value = message.toString();
+    var parsed = regExp.exec(topic);
 
-    log.debug('mqtt >', topic, message);
-
-
-
-
-
-    cul.write(data, function() {
-
-    });
+    log.debug('mqtt >', topic, parsed[1], parsed[2], value);
+    switch (parsed[1]) {
+        case 'FS20':
+            data = 'F' + parsed[2].toUpperCase() + value.toUpperCase();
+            log.debug('cul <', data);
+            cul.write(data, function(err, res) {
+                log.debug('cul >', res);
+            });
+            break;
+        case 'IT':
+            data = 'is' + parsed[2].toUpperCase() + value.toUpperCase();
+            log.debug('cul <', data);
+            cul.write(data, function(err, res) {
+                log.debug('cul >', res);
+            });
+            break;
+    }
 });
 
 var cul = new Cul({
@@ -78,9 +89,8 @@ var cul = new Cul({
 cul.on('ready', function () {
     mqtt.publish(config.name + '/connected', '2');
     cul.write('V');
-    log.info('cul ready', version);
+    log.info('cul ready');
 });
-
 
 // TODO - read topicMap from json file, remove hardcoded personal stuff here.
 var topicMap = {
@@ -106,7 +116,7 @@ function map(topic) {
 }
 
 cul.on('data', function (raw, obj) {
-    log.debug('< cul', raw, obj);
+    log.debug('cul <', raw, obj);
 
     var prefix = config.name + '/status/';
     var topic;
@@ -126,7 +136,7 @@ cul.on('data', function (raw, obj) {
                 val.name = map(obj.protocol + '/' + obj.address);
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
-                log.debug('> mqtt', topic, val);
+                log.debug('mqtt >', topic, val);
                 mqtt.publish(topic, JSON.stringify(val), {retain: true});
                 break;
 
@@ -138,7 +148,7 @@ cul.on('data', function (raw, obj) {
                     val.name = map(obj.protocol + '/' + obj.address + '/' + el);
                     if (obj.rssi) val.cul_rssi = obj.rssi;
                     if (obj.device) val.cul_device = obj.device;
-                    log.debug('> mqtt', topic, val);
+                    log.debug('mqtt >', topic, val);
                     mqtt.publish(topic, JSON.stringify(val), {retain: true});
                 }
                 break;
@@ -150,7 +160,7 @@ cul.on('data', function (raw, obj) {
                 val.name = map('FS20/' + obj.address);
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
-                log.debug('> mqtt', topic, val.val, val.cul_fs20.cmd);
+                log.debug('mqtt >', topic, val.val, val.cul_fs20.cmd);
                 mqtt.publish(topic, JSON.stringify(val), {retain: false});
                 break;
 
