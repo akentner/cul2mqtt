@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-var Mqtt =      require('mqtt');
-var Cul =       require('cul');
-var pkg =       require('./package.json');
-var log =       require('yalm');
-var config =    require('yargs')
+var Mqtt = require('mqtt');
+var Cul = require('cul');
+var pkg = require('./package.json');
+var log = require('yalm');
+var config = require('yargs')
     .usage(pkg.name + ' ' + pkg.version + '\n' + pkg.description + '\n\nUsage: $0 [options]')
     .describe('v', 'possible values: "error", "warn", "info", "debug"')
     .describe('n', 'topic prefix')
@@ -28,15 +28,16 @@ var config =    require('yargs')
     .help('help')
     .argv;
 
-log.loglevel =          config.verbosity;
+var connected, mqtt, cul;
+var culBusy = false;
+var culQueue = [];
 
+log.loglevel = config.verbosity;
 log.info(pkg.name, pkg.version, 'starting');
-
 log.info('mqtt trying to connect', config.url);
-var mqtt = Mqtt.connect(config.url, {will: {topic: config.name + '/connected', payload: '0'}});
-mqtt.publish(config.name + '/connected', '1');
 
-var connected;
+mqtt = Mqtt.connect(config.url, {will: {topic: config.name + '/connected', payload: '0'}});
+mqtt.publish(config.name + '/connected', '1');
 
 mqtt.on('connect', function () {
     connected = true;
@@ -63,25 +64,53 @@ mqtt.on('message', function (topic, message) {
     var parsed = regExp.exec(topic);
 
     log.debug('mqtt >', topic, parsed[1], parsed[2], value);
+
+    function culSendQueued(data) {
+        var cmd;
+        if (data) {
+            culQueue.push(data);
+        }
+        if (!culBusy && culQueue.length > 0) {
+            culBusy = true;
+            data = culQueue.shift();
+            cmd = data.protocol + data.device + data.value;
+            log.debug('cul <', data);
+            cul.write(cmd, function (err, res) {
+                if (err) {
+                    Log.error('cul > ERROR: ', err, res)
+                } else {
+                    log.debug('cul >', res);
+                    ackSendStatus(data);
+                }
+                culBusy = false;
+                culSendQueued();
+            });
+        }
+    }
+
+    function ackSendStatus(data) {
+        var prefix = config.name + '/status/';
+        switch (data.protocol) {
+            case 'is':
+                mqtt.publish(prefix + 'IT/' + data.device, data.value);
+                break;
+        }
+    }
+
     switch (parsed[1]) {
         case 'FS20':
-            data = 'F' + parsed[2].toUpperCase() + value.toUpperCase();
-            log.debug('cul <', data);
-            cul.write(data, function(err, res) {
-                log.debug('cul >', res);
-            });
+            culSendQueued({protocol: 'F', device: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
             break;
         case 'IT':
-            data = 'is' + parsed[2].toUpperCase() + value.toUpperCase();
-            log.debug('cul <', data);
-            cul.write(data, function(err, res) {
-                log.debug('cul >', res);
-            });
+            culSendQueued({protocol: 'is', device: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
+            break;
+        case 'RAW':
+            culSendQueued({protocol: '', device: parsed[2], 'value': value});
             break;
     }
 });
 
-var cul = new Cul({
+cul = new Cul({
     serialport: config.serialport,
     mode: 'SlowRF'
 });
@@ -89,31 +118,9 @@ var cul = new Cul({
 cul.on('ready', function () {
     mqtt.publish(config.name + '/connected', '2');
     cul.write('V');
+    cul.write('X67');
     log.info('cul ready');
 });
-
-// TODO - read topicMap from json file, remove hardcoded personal stuff here.
-var topicMap = {
-    'EM/0205': 'Leistung Spülmaschine',
-    'EM/0206': 'Leistung Trockner',
-    'EM/0309': 'Gaszähler',
-    'FS20/6C4800': 'Klingel',
-    'FS20/B33100': 'RC8:1',
-    'FS20/B33101': 'RC8:2',
-    'FS20/B33102': 'RC8:3',
-    'FS20/B33103': 'RC8:4',
-    'FS20/446000': 'Gastherme Brenner',
-    'FS20/446001': 'Gastherme Brenner',
-    'WS/1/temperature': 'Temperatur Wohnzimmer',
-    'WS/1/humidity': 'Luftfeuchte Wohnzimmer',
-    'WS/4/temperature': 'Temperatur Garten',
-    'WS/4/humidity': 'Luftfeuchte Garten',
-    'HMS/A5E3/temperature': 'Temperatur Aquarium'
-};
-
-function map(topic) {
-    return topicMap[topic] || topic;
-}
 
 cul.on('data', function (raw, obj) {
     log.debug('cul <', raw, obj);
@@ -165,7 +172,12 @@ cul.on('data', function (raw, obj) {
                 break;
 
             default:
+                obj.raw = raw;
+                mqtt.publish(prefix + 'RAW', JSON.stringify(obj), {retain: false});
                 log.warn('unknown protocol', obj.protocol);
         }
+    } else {
+        obj.raw = raw;
+        mqtt.publish(prefix + 'RAW', JSON.stringify(obj), {retain: false});
     }
 });
