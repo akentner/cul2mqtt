@@ -28,12 +28,22 @@ var config = require('yargs')
     .help('help')
     .argv;
 
+var configDevices;
+try {
+    configDevices = require('./config.json');
+} catch (e) {
+    configDevices = {};
+}
+
 var connected, mqtt, cul;
 var culBusy = false;
 var culQueue = [];
 
+var mqttDebounceState = {};
+
 log.loglevel = config.verbosity;
 log.info(pkg.name, pkg.version, 'starting');
+log.info('configDevices', configDevices);
 log.info('mqtt trying to connect', config.url);
 
 mqtt = Mqtt.connect(config.url, {will: {topic: config.name + '/connected', payload: '0'}});
@@ -73,7 +83,7 @@ mqtt.on('message', function (topic, message) {
         if (!culBusy && culQueue.length > 0) {
             culBusy = true;
             data = culQueue.shift();
-            cmd = data.protocol + data.device + data.value;
+            cmd = data.protocol + data.address + data.value;
             log.debug('cul <', data);
             cul.write(cmd, function (err, res) {
                 if (err) {
@@ -92,20 +102,20 @@ mqtt.on('message', function (topic, message) {
         var prefix = config.name + '/status/';
         switch (data.protocol) {
             case 'is':
-                mqtt.publish(prefix + 'IT/' + data.device, data.value);
+                mqtt.publish(prefix + 'IT/' + data.address, data.value, {retain: true});
                 break;
         }
     }
 
     switch (parsed[1]) {
         case 'FS20':
-            culSendQueued({protocol: 'F', device: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
+            culSendQueued({protocol: 'F', address: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
             break;
         case 'IT':
-            culSendQueued({protocol: 'is', device: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
+            culSendQueued({protocol: 'is', address: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
             break;
         case 'RAW':
-            culSendQueued({protocol: '', device: parsed[2], 'value': value});
+            culSendQueued({protocol: '', address: parsed[2], 'value': value});
             break;
     }
 });
@@ -122,31 +132,44 @@ cul.on('ready', function () {
     log.info('cul ready');
 });
 
-var topicMap = {
-    'EM/0205': 'Leistung Spülmaschine',
-    'EM/0206': 'Leistung Trockner',
-    'EM/0309': 'Gaszähler',
-    'FS20/6C4800': 'Klingel',
-    'FS20/B33100': 'RC8:1',
-    'FS20/B33101': 'RC8:2',
-    'FS20/B33102': 'RC8:3',
-    'FS20/B33103': 'RC8:4',
-    'FS20/446000': 'Gastherme Brenner',
-    'FS20/446001': 'Gastherme Brenner',
-    'WS/1/temperature': 'Temperatur Wohnzimmer',
-    'WS/1/humidity': 'Luftfeuchte Wohnzimmer',
-    'WS/4/temperature': 'Temperatur Garten',
-    'WS/4/humidity': 'Luftfeuchte Garten',
-    'HMS/A5E3/temperature': 'Temperatur Aquarium'
-};
 
-function map(topic) {
-    return topicMap[topic] || topic;
+function getObjectConf(obj) {
+    var conf;
+    conf = configDevices.devices[obj.protocol] || {};
+    conf = conf[obj.address] || {};
+    conf.protocol = obj.protocol;
+    conf.address = obj.address;
+
+    return conf;
 }
 
+function translateCulValue(val, objConf) {
+    var translation = val;
+    Object.keys(objConf.values || {}).forEach(function (idx) {
+        if (objConf.values[idx] === val) {
+            translation = idx;
+        }
+    });
+
+    return translation;
+}
+
+function mqttPublishDebounced(topic, val, retain, debounce) {
+    var path = topic + '_' + val.val;
+    if (!mqttDebounceState[path]) {
+        log.debug('mqtt >', topic, val.val, val.cul_fs20.cmd);
+        mqtt.publish(topic, JSON.stringify(val), {retain: retain});
+        mqtt.publish(topic + '/' + val.val, JSON.stringify(val), {retain: false});
+        mqttDebounceState[path] = setTimeout(function () {
+            clearTimeout(mqttDebounceState[path]);
+            mqttDebounceState[path] = null;
+        }, debounce);
+    }
+}
 cul.on('data', function (raw, obj) {
     log.debug('cul <', raw, obj);
 
+    var objConf;
     var prefix = config.name + '/status/';
     var topic;
     var val = {
@@ -154,15 +177,15 @@ cul.on('data', function (raw, obj) {
     };
 
     if (obj && obj.protocol && obj.data) {
-
-        log.debug('obj', obj);
+        objConf = getObjectConf(obj);
+        log.debug('objConf', objConf);
 
         switch (obj.protocol) {
             case 'EM':
                 topic = prefix + obj.protocol + '/' + obj.address;
                 val.val = obj.data.total;
                 val.cul_em = obj.data;
-                val.name = map(obj.protocol + '/' + obj.address);
+                val.name = obj.protocol + '/' + obj.address;
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
                 log.debug('mqtt >', topic, val);
@@ -174,7 +197,7 @@ cul.on('data', function (raw, obj) {
                 for (var el in obj.data) {
                     topic = prefix + obj.protocol + '/' + obj.address + '/' + el;
                     val.val = obj.data[el];
-                    val.name = map(obj.protocol + '/' + obj.address + '/' + el);
+                    val.name = obj.protocol + '/' + obj.address + '/' + el;
                     if (obj.rssi) val.cul_rssi = obj.rssi;
                     if (obj.device) val.cul_device = obj.device;
                     log.debug('mqtt >', topic, val);
@@ -184,13 +207,15 @@ cul.on('data', function (raw, obj) {
 
             case 'FS20':
                 topic = prefix + 'FS20/' + obj.address;
-                val.val = obj.data.cmdRaw;
+                val.val = translateCulValue(obj.data.cmdRaw, objConf);
                 val.cul_fs20 = obj.data;
-                val.name = map('FS20/' + obj.address);
+                val.name = objConf.name || 'FS20/' + obj.address;
+
                 if (obj.rssi) val.cul_rssi = obj.rssi;
                 if (obj.device) val.cul_device = obj.device;
-                log.debug('mqtt >', topic, val.val, val.cul_fs20.cmd);
-                mqtt.publish(topic, JSON.stringify(val), {retain: false});
+
+                mqttPublishDebounced(topic, val, objConf.retain || false, objConf.debounce || 0);
+
                 break;
 
             default:
