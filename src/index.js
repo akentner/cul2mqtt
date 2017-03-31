@@ -21,7 +21,7 @@ class Cul2Mqtt {
         });
 
         this.logger = new Logger({
-            level: 'info',
+            level: options.logger.level,
             transports: [
                 new (transports.Console)({
                     colorize: 'level',
@@ -67,11 +67,14 @@ class Cul2Mqtt {
 
 const server = new Cul2Mqtt({
     mqtt: {
-        url: 'mqtt://192.168.178.96',
-        topic: 'cul433'
+        url: process.env.MQTT_URL, //'mqtt://192.168.178.96',
+        topic: process.env.MQTT_TOPIC, //'cul433'
     },
     cul: {
-        tty: 'asd'
+        serialport: process.env.CUL_SERIALPORT, //'asd'
+    },
+    logger: {
+        level: process.env.LOGGER_LEVEL || 'info',
     }
 });
 server.run();
