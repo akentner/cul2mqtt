@@ -13,6 +13,7 @@ class Cul2Mqtt {
         try {
             this.configureEventDispatcher();
             this.configureLogger(options);
+            this.logger.debug('bootstrapping CUL2MQTT', this.options);
             this.configureMqttAdapter(options);
             this.configureCulAdapter(options);
             this.configureProtocols();
@@ -47,7 +48,7 @@ class Cul2Mqtt {
     }
 
     configureMqttAdapter(options) {
-        if (!options.mqtt.topic || !options.mqtt.url)
+        if (!options.mqtt.url)
             throw new Error('MQTT adapter not properly configured');
 
         this.mqtt = new MqttAdapter({
@@ -83,7 +84,6 @@ class Cul2Mqtt {
         });
     };
 
-
     heartbeat = () => {
         let date = new Date();
         this.logger.debug('heartbeat', date.toJSON());
@@ -101,10 +101,10 @@ class Cul2Mqtt {
 const server = new Cul2Mqtt({
     mqtt: {
         url: process.env.MQTT_URL, //'mqtt://192.168.178.96',
-        topic: process.env.MQTT_TOPIC, //'cul433'
+        topic: process.env.MQTT_TOPIC || 'cul',
     },
     cul: {
-        serialport: process.env.CUL_SERIALPORT, //'asd'
+        serialport: process.env.CUL_SERIALPORT,
     },
     logger: {
         level: process.env.LOGGER_LEVEL || 'info',

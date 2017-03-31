@@ -21,7 +21,18 @@ export default class CulAdapter {
 
     init = () => {
         this.logger.info('CUL connected to serialport ' + this.options.serialport);
-        this.eventDispatcher.dispatch('cul.connect');
+        this.cul = new Cul({
+            serialport: this.options.serialport,
+            mode: this.options.mode,
+            initCmd: 0x67,
+        });
+
+        this.cul.on('ready', function () {
+            mqtt.publish(config.name + '/connected', '2');
+            cul.write('V');
+            cul.write('X67');
+            this.eventDispatcher.dispatch('cul.connect');
+        });
     };
 
     send = (data, callback) => {
