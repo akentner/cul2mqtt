@@ -6,6 +6,7 @@ export default class CulAdapter {
         this.eventDispatcher = props.eventDispatcher;
 
         this.options = {
+            serialport: props.options.serialport,
             initCmd: props.initCmd || 0x01,
             mode: props.options.mode || 'SlowRF',
             init: props.options.init || true,
@@ -19,7 +20,7 @@ export default class CulAdapter {
     }
 
     init = () => {
-        this.logger.info('cul connected to serialport ' + this.options.serialport);
+        this.logger.info('CUL connected to serialport ' + this.options.serialport);
         this.eventDispatcher.dispatch('cul.connect');
     };
 

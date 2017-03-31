@@ -5,29 +5,50 @@ import EventDispatcher from "./util/EventDispatcher";
 import IT from "./protocols/IT";
 import FS20 from "./protocols/FS20";
 
-const TIMEOUT = 30000;
+const HEARTBEAT_TIMEOUT = 30000; // 30sec
 
 class Cul2Mqtt {
     constructor(options) {
         this.options = options;
-        this.eventDispatcher = new EventDispatcher();
-        this.eventDispatcher.addEventListener('mqtt.connect', () => {
-            this.mqtt.publish('connected', '1');
-            this.cul.init();
-        });
-        this.eventDispatcher.addEventListener('cul.connect', () => {
-            this.mqtt.publish('connected', '2');
-            this.heartbeat();
-        });
+        try {
+            this.configureEventDispatcher();
+            this.configureLogger(options);
+            this.configureMqttAdapter(options);
+            this.configureCulAdapter(options);
+            this.configureProtocols();
+        } catch (err) {
+            if (this.logger) {
+                this.logger.error(err);
+            } else {
+                console.error(err);
+            }
+            process.exit(1);
+        }
+    }
 
-        this.logger = new Logger({
-            level: options.logger.level,
-            transports: [
-                new (transports.Console)({
-                    colorize: 'level',
-                })
-            ]
+    configureProtocols() {
+        this.protocols = {
+            'IT': new IT(this),
+            'FS20': new FS20(this),
+        };
+    }
+
+    configureCulAdapter(options) {
+        if (!options.cul.serialport)
+            throw new Error('CUL adapter not properly configured');
+
+        this.cul = new CulAdapter({
+            logger: this.logger,
+            eventDispatcher: this.eventDispatcher,
+            options: {
+                serialport: options.cul.serialport,
+            }
         });
+    }
+
+    configureMqttAdapter(options) {
+        if (!options.mqtt.topic || !options.mqtt.url)
+            throw new Error('MQTT adapter not properly configured');
 
         this.mqtt = new MqttAdapter({
             logger: this.logger,
@@ -37,30 +58,42 @@ class Cul2Mqtt {
                 url: options.mqtt.url,
             }
         });
-
-        this.cul = new CulAdapter({
-            logger: this.logger,
-            eventDispatcher: this.eventDispatcher,
-            options: {
-                tty: options.cul.tty,
-            }
-        });
-
-        this.protocols = {
-            'IT': new IT(this),
-            'FS20': new FS20(this),
-        };
     }
+
+    configureEventDispatcher() {
+        this.eventDispatcher = new EventDispatcher();
+        this.eventDispatcher.addEventListener('mqtt.connect', () => {
+            this.mqtt.publish('connected', '1');
+            this.cul.init();
+        });
+        this.eventDispatcher.addEventListener('cul.connect', () => {
+            this.mqtt.publish('connected', '2');
+            this.heartbeat();
+        });
+    }
+
+    configureLogger = (options) => {
+        this.logger = new Logger({
+            level: options.logger.level,
+            transports: [
+                new (transports.Console)({
+                    colorize: 'level',
+                })
+            ]
+        });
+    };
+
 
     heartbeat = () => {
         let date = new Date();
         this.logger.debug('heartbeat', date.toJSON());
         this.mqtt.publish('heartbeat', date.toJSON());
-        setTimeout(this.heartbeat, TIMEOUT);
+        setTimeout(this.heartbeat, HEARTBEAT_TIMEOUT);
     };
 
     run = () => {
         this.logger.info('starting CUL2MQTT', this.options);
+
         this.mqtt.init();
     }
 }

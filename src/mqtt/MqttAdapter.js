@@ -2,7 +2,7 @@ import mqtt from "mqtt";
 
 function onConnect() {
     this.connected = true;
-    this.logger.info('mqtt connected to ' + this.options.url + ' with topic "' + this.options.topic + '"');
+    this.logger.info('MQTT connected to ' + this.options.url + ' with topic "' + this.options.topic + '"');
     // this.mqtt.subscribe(this.options.topic + '/set/#');
     this.mqtt.subscribe(this.options.topic + '/#');
     this.eventDispatcher.dispatch('mqtt.connect');
