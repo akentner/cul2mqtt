@@ -1,9 +1,10 @@
-import MqttAdapter from "./mqtt/MqttAdapter";
-import CulAdapter from "./cul/CulAdapter";
+import MqttAdapter from "./adapter/MqttAdapter";
+import CulAdapter from "./adapter/CulAdapter";
 import {Logger, transports} from "winston";
 import EventDispatcher from "./util/EventDispatcher";
-import IT from "./protocols/IT";
+import InterTechno from "./protocols/InterTechno";
 import FS20 from "./protocols/FS20";
+import MORITZ from "./protocols/MORITZ";
 
 const HEARTBEAT_TIMEOUT = 30000; // 30sec
 
@@ -29,8 +30,9 @@ class Cul2Mqtt {
 
     configureProtocols() {
         this.protocols = {
-            'IT': new IT(this),
+            'IT': new InterTechno(this),
             'FS20': new FS20(this),
+            'MORITZ': new MORITZ(this),
         };
     }
 
@@ -87,13 +89,12 @@ class Cul2Mqtt {
     heartbeat = () => {
         let date = new Date();
         this.logger.debug('heartbeat', date.toJSON());
-        this.mqtt.publish('heartbeat', date.toJSON());
+        this.mqtt.publish('heartbeat', date.getTime().toString());
         setTimeout(this.heartbeat, HEARTBEAT_TIMEOUT);
     };
 
     run = () => {
         this.logger.info('starting CUL2MQTT', this.options);
-
         this.mqtt.init();
     }
 }

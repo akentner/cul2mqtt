@@ -3,8 +3,8 @@ import mqtt from "mqtt";
 function onConnect() {
     this.connected = true;
     this.logger.info('MQTT connected to ' + this.options.url + ' with topic "' + this.options.topic + '"');
-    // this.mqtt.subscribe(this.options.topic + '/set/#');
-    this.mqtt.subscribe(this.options.topic + '/#');
+    this.mqtt.subscribe(this.options.topic + '/set/#');
+    // this.mqtt.subscribe(this.options.topic + '/status/#');
     this.eventDispatcher.dispatch('mqtt.connect');
 }
 
@@ -27,9 +27,11 @@ function onMessage(topic, message) {
     let parsed;
     if (parsed = regExp.exec(topic)) {
         const [topic, protocol, address] = parsed;
-        this.eventDispatcher.dispatch('mqtt.message.set.' + protocol.toUpperCase(), {
+        this.eventDispatcher.dispatch('mqtt.set.received', {
+            topic: topic,
+            protocol: protocol,
             address: address.toUpperCase(),
-            message: message.toString().toUpperCase()
+            message: message.toString()
         });
     }
 }
@@ -79,7 +81,7 @@ export default class MqttAdapter {
         //         var prefix = config.name + '/status/';
         //         switch (data.protocol) {
         //             case 'is':
-        //                 mqtt.publish(prefix + 'IT/' + data.address, data.value, {retain: true});
+        //                 mqtt.publish(prefix + 'InterTechno/' + data.address, data.value, {retain: true});
         //                 break;
         //         }
         //     }
@@ -88,7 +90,7 @@ export default class MqttAdapter {
         //         case 'FS20':
         //             culSendQueued({protocol: 'F', address: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
         //             break;
-        //         case 'IT':
+        //         case 'InterTechno':
         //             culSendQueued({protocol: 'is', address: parsed[2].toUpperCase(), 'value': value.toUpperCase()});
         //             break;
         //         case 'RAW':
@@ -115,8 +117,8 @@ export default class MqttAdapter {
 
     };
 
-    publish = (topic, message) => {
+    publish = (topic, message, opts, callback) => {
         this.logger.debug('[cul2mqtt > mqtt]', this.options.topic + '/' + topic, message);
-        this.mqtt.publish(this.options.topic + '/' + topic, message);
+        this.mqtt.publish(this.options.topic + '/' + topic, message, opts, callback);
     }
 }
