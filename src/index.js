@@ -5,6 +5,8 @@ import EventDispatcher from "./util/EventDispatcher";
 import InterTechno from "./protocols/InterTechno";
 import FS20 from "./protocols/FS20";
 import MORITZ from "./protocols/MORITZ";
+import Debug from "./protocols/Debug";
+import FHT from "./protocols/FHT";
 
 const HEARTBEAT_TIMEOUT = 30000; // 30sec
 
@@ -33,6 +35,8 @@ class Cul2Mqtt {
             'IT': new InterTechno(this),
             'FS20': new FS20(this),
             'MORITZ': new MORITZ(this),
+            'FHT': new FHT(this),
+            'Debug': new Debug(this),
         };
     }
 

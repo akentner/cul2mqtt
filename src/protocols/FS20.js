@@ -9,15 +9,6 @@
 
 export default class FS20 {
 
-    constructor(props) {
-        this.logger = props.logger;
-        this.eventDispatcher = props.eventDispatcher;
-        this.cul = props.cul;
-        this.mqtt = props.mqtt;
-        this.eventDispatcher.addEventListener('mqtt.message.set.FS20', this.handleMqttMessage);
-        this.eventDispatcher.addEventListener('cul.data.received', this.handleCulData);
-    }
-
     handleMqttMessage = (data) => {
         const {protocol, address, message} = data;
         if (protocol === 'FS20') {
@@ -37,9 +28,15 @@ export default class FS20 {
     };
 
     handleCulData = (data) => {
-        const {obj} = data;
-        if (obj.protocol === 'FS20') {
-            this.logger.info('cul data handled by FS20', obj);
+        const {protocol, address, message} = data;
+        if (protocol === 'FS20') {
+            const value = message.toUpperCase();
+            this.logger.info('cul data handled by FS20', JSON.stringify(data));
+
+
+            // this.cul.send(`is${address.toUpperCase()}${value}`, () => {
+            //     this.mqtt.publish(`status/IT/${address}`, value, {retain: true});
+            // });
         }
     };
 
